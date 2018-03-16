@@ -1,0 +1,6 @@
+{
+	"id": "nodebb-plugin-import-smallworld",
+	"name": "nodebb-plugin-import-smallworld",
+	"description": "Export your SmallWorld Community Forum into NodeBB",
+	"url": "https://github.com/akhoury/nodebb-plugin-import-smallworld"
+}
