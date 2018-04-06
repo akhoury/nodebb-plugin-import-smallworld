@@ -67,8 +67,10 @@ var logPrefix = '[nodebb-plugin-import-smallworld]';
 			+ '\n' +  prefix + 'groups.group_name as _name, '
 			+ '\n' +  prefix + 'groups.description as _description, '
 			+ '\n IF(' + prefix + 'groups.deleted_at IS NULL, 0, 1) as _deleted, '
-			+ '\n' +  prefix + 'groups.slug as _slug '
+			+ '\n' +  prefix + 'groups.slug as _slug, '
+			+ '\n' +  prefix + 'forum_categories.id as _cids '
 			+ '\n' +  'FROM ' + prefix + 'groups '
+			+ '\n' + 'JOIN ' + prefix + 'forum_categories ON ' + prefix + 'forum_categories.group_id = ' + prefix + 'groups.id '
 			+ '\n' + (start >= 0 && limit >= 0 ? ' LIMIT ' + start + ',' + limit : '');
 
 
@@ -91,6 +93,11 @@ var logPrefix = '[nodebb-plugin-import-smallworld]';
 						row._name = row._name
 							.replace(/\//g, '-')
 							.replace(/:/g, '-');
+					}
+					if (row._cids) {
+						row._cids = [].concat(row._cids);
+					} else {
+						delete row._cids;
 					}
 					map[row._gid] = row;
 				});
@@ -128,9 +135,6 @@ var logPrefix = '[nodebb-plugin-import-smallworld]';
 			});
 	};
 
-
-
-
 	Exporter.getUsers = function(callback) {
 		Exporter.getPaginatedUsers(0, -1, callback);
 	};
@@ -154,9 +158,12 @@ var logPrefix = '[nodebb-plugin-import-smallworld]';
 			+ '\n CONCAT(' + prefix + 'users.city, \',\', ' + prefix + 'users.state) AS _location, '
 			+ '\n' + prefix + 'users.avatar as _picture, '
 			+ '\n' + prefix + 'users.groups as _groups, '
-			+ '\n' + prefix + 'users.groups as _followingUids '
+			+ '\n' + prefix + 'users.connections as _followingUids, '
+			+ '\n' + prefix + 'users.connections as _friendsUids, '
+			+ '\n' + prefix + 'forum_posts.created_at as _firstPostDate '
 
 			+ '\n' + 'FROM ' + prefix + 'users '
+			+ '\n' + 'LEFT JOIN ' + prefix + 'forum_posts ON ' + prefix + 'forum_posts.sw_user_id = ' + prefix + 'users.id '
 			+ '\n' + 'ORDER BY ' + prefix + 'users.id '
 			+ '\n' + (start >= 0 && limit >= 0 ? ' LIMIT ' + start + ',' + limit : '');
 
@@ -203,8 +210,27 @@ var logPrefix = '[nodebb-plugin-import-smallworld]';
 									});
 							}
 						}
+						if (row._friendsUids) {
+							try {
+								row._friendsUids = JSON.parse(row._friendsUids);
+							} catch (e) {
+								delete row._friendsUids;
+							}
+							if (row._friendsUids) {
+								row._friendsUids = row._friendsUids
+									.map(function (id) {
+										return idsMap[id] ? idsMap[id]._uid : null;
+									})
+									.filter(function (_uid) {
+										return !!_uid;
+									});
+							}
+						}
 						if (row._joindate) {
 							row._joindate = moment(row._joindate).valueOf();
+						}
+						if (!row._joindate && row._firstPostDate) {
+							row._joindate = moment(row._firstPostDate).valueOf();
 						}
 						map[row._uid] = row;
 					});
