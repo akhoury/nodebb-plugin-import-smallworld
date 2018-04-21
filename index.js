@@ -71,7 +71,7 @@ var logPrefix = '[nodebb-plugin-import-smallworld]';
 			+ '\n' +  prefix + 'forum_categories.id as _cids, '
 			+ '\n' +  prefix + 'groups.owner_id as _ownerUid '
 			+ '\n' +  'FROM ' + prefix + 'groups '
-			+ '\n' + 'JOIN ' + prefix + 'forum_categories ON ' + prefix + 'forum_categories.group_id = ' + prefix + 'groups.id '
+			+ '\n' + 'LEFT JOIN ' + prefix + 'forum_categories ON ' + prefix + 'forum_categories.group_id = ' + prefix + 'groups.id '
 			+ '\n' + (start >= 0 && limit >= 0 ? ' LIMIT ' + start + ',' + limit : '');
 
 
@@ -81,34 +81,39 @@ var logPrefix = '[nodebb-plugin-import-smallworld]';
 			return callback(err);
 		}
 
-		Exporter.connection.query(query,
-			function(err, rows) {
-				if (err) {
-					Exporter.error(err);
-					return callback(err);
-				}
-				//normalize here
-				var map = {};
-				rows.forEach(function(row) {
-					if (row._name) {
-						row._name = row._name
-							.replace(/\//g, '-')
-							.replace(/:/g, '-');
+		getUserIdsMap(function (err, idsMap) {
+			Exporter.connection.query(query,
+				function(err, rows) {
+					if (err) {
+						Exporter.error(err);
+						return callback(err);
 					}
-					if (row._cids) {
-						row._cids = [].concat(row._cids);
-					} else {
-						delete row._cids;
-					}
-					try {
-						row._ownerUid = JSON.parse(row._ownerUid)[0];
-					} catch (e) {
-						delete row._ownerUid;
-					}
-					map[row._gid] = row;
+					//normalize here
+					var map = {};
+					rows.forEach(function(row) {
+						if (row._name) {
+							row._name = row._name
+								.replace(/\//g, '-')
+								.replace(/:/g, '-');
+						}
+						if (row._cids) {
+							row._cids = [].concat(row._cids);
+						} else {
+							delete row._cids;
+						}
+						try {
+							row._ownerUid = JSON.parse(row._ownerUid)[0];
+						} catch (e) {
+							delete row._ownerUid;
+						}
+						if (row._ownerUid) {
+							row._ownerUid = idsMap[row._ownerUid] ? idsMap[row._ownerUid]._uid : null;
+						}
+						map[row._gid] = row;
+					});
+					callback(null, map);
 				});
-				callback(null, map);
-			});
+		});
 	};
 
 
