@@ -68,7 +68,8 @@ var logPrefix = '[nodebb-plugin-import-smallworld]';
 			+ '\n' +  prefix + 'groups.description as _description, '
 			+ '\n IF(' + prefix + 'groups.deleted_at IS NULL, 0, 1) as _deleted, '
 			+ '\n' +  prefix + 'groups.slug as _slug, '
-			+ '\n' +  prefix + 'forum_categories.id as _cids '
+			+ '\n' +  prefix + 'forum_categories.id as _cids, '
+			+ '\n' +  prefix + 'groups.owner_id as _ownerUid '
 			+ '\n' +  'FROM ' + prefix + 'groups '
 			+ '\n' + 'JOIN ' + prefix + 'forum_categories ON ' + prefix + 'forum_categories.group_id = ' + prefix + 'groups.id '
 			+ '\n' + (start >= 0 && limit >= 0 ? ' LIMIT ' + start + ',' + limit : '');
@@ -98,6 +99,11 @@ var logPrefix = '[nodebb-plugin-import-smallworld]';
 						row._cids = [].concat(row._cids);
 					} else {
 						delete row._cids;
+					}
+					try {
+						row._ownerUid = JSON.parse(row._ownerUid)[0];
+					} catch (e) {
+						delete row._ownerUid;
 					}
 					map[row._gid] = row;
 				});
