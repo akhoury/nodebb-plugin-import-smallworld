@@ -6,6 +6,14 @@ var _ = require('underscore');
 var moment = require('moment');
 var noop = function(){};
 var logPrefix = '[nodebb-plugin-import-smallworld]';
+var parseTillObject = function (str) {
+	if (typeof str !== 'string') {
+		return str;
+	}
+	try {
+		return parseTillObject(JSON.parse(str));
+	} catch (e) {}
+};
 
 (function(Exporter) {
 
@@ -52,6 +60,13 @@ var logPrefix = '[nodebb-plugin-import-smallworld]';
 		callback(null, Exporter.config());
 	};
 
+	Exporter.query = function (query, callback) {
+		console.log('\n==========<query>============');
+		console.log(query);
+		console.log('==========</query>============\n');
+		return Exporter.connection.query(query, callback);
+	};
+
 	Exporter.getGroups = function(callback) {
 		return Exporter.getPaginatedGroups(0, -1, callback)
 	};
@@ -71,9 +86,8 @@ var logPrefix = '[nodebb-plugin-import-smallworld]';
 			+ '\n' +  prefix + 'forum_categories.id as _cids, '
 			+ '\n' +  prefix + 'groups.owner_id as _ownerUid '
 			+ '\n' +  'FROM ' + prefix + 'groups '
-			+ '\n' + 'JOIN ' + prefix + 'forum_categories ON ' + prefix + 'forum_categories.group_id = ' + prefix + 'groups.id '
+			+ '\n' + 'JOIN ' + prefix + 'forum_categories ON ' + prefix + 'forum_categories.group_id = ' + prefix + 'groups.small_world_id '
 			+ '\n' + (start >= 0 && limit >= 0 ? ' LIMIT ' + start + ',' + limit : '');
-
 
 		if (!Exporter.connection) {
 			err = {error: 'MySQL connection is not setup. Run setup(config) first'};
@@ -81,34 +95,37 @@ var logPrefix = '[nodebb-plugin-import-smallworld]';
 			return callback(err);
 		}
 
-		Exporter.connection.query(query,
-			function(err, rows) {
-				if (err) {
-					Exporter.error(err);
-					return callback(err);
-				}
-				//normalize here
-				var map = {};
-				rows.forEach(function(row) {
-					if (row._name) {
-						row._name = row._name
-							.replace(/\//g, '-')
-							.replace(/:/g, '-');
+		getUserIdsMap(function (err, idsMap) {
+			Exporter.query(query,
+				function(err, rows) {
+					if (err) {
+						Exporter.error(err);
+						return callback(err);
 					}
-					if (row._cids) {
-						row._cids = [].concat(row._cids);
-					} else {
-						delete row._cids;
-					}
-					try {
-						row._ownerUid = JSON.parse(row._ownerUid)[0];
-					} catch (e) {
-						delete row._ownerUid;
-					}
-					map[row._gid] = row;
+					//normalize here
+					var map = {};
+					rows.forEach(function(row) {
+						if (row._name) {
+							row._name = row._name
+								.replace(/\//g, '-')
+								.replace(/:/g, '-');
+						}
+						if (row._cids) {
+							row._cids = [].concat(row._cids);
+						} else {
+							delete row._cids;
+						}
+						try {
+							row._ownerUid = (parseTillObject(row._ownerUid) || [])[0];
+							row._ownerUid = idsMap[row._ownerUid] ? idsMap[row._ownerUid]._uid : null;
+						} catch (e) {
+							delete row._ownerUid;
+						}
+						map[row._gid] = row;
+					});
+					callback(null, map);
 				});
-				callback(null, map);
-			});
+		});
 	};
 
 
@@ -126,7 +143,7 @@ var logPrefix = '[nodebb-plugin-import-smallworld]';
 			+ '\n' + prefix + 'users.small_world_id as _uid '
 			+ '\n' + 'FROM ' + prefix + 'users '
 			+ '\n' + 'ORDER BY ' + prefix + 'users.id ';
-		Exporter.connection.query(query,
+		Exporter.query(query,
 			function(err, rows) {
 				if (err) {
 					Exporter.error(err);
@@ -158,9 +175,9 @@ var logPrefix = '[nodebb-plugin-import-smallworld]';
 			+ '\n' + prefix + 'users.small_world_id as _uid, '
 
 			+ '\n' + prefix + 'users.username as _username, '
+			+ '\n' + prefix + 'users.display_name as _fullname, '
 			+ '\n' + prefix + 'users.email as _email, '
 			+ '\n' + prefix + 'users.created_at as _joindate, '
-			+ '\n CONCAT(' + prefix + 'users.firstName, " ", ' + prefix + 'users.lastName) AS _fullname, '
 			+ '\n CONCAT(' + prefix + 'users.city, \',\', ' + prefix + 'users.state) AS _location, '
 			+ '\n' + prefix + 'users.avatar as _picture, '
 			+ '\n' + prefix + 'users.groups as _groups, '
@@ -180,7 +197,7 @@ var logPrefix = '[nodebb-plugin-import-smallworld]';
 		}
 
 		getUserIdsMap(function (err, idsMap) {
-			Exporter.connection.query(query,
+			Exporter.query(query,
 				function(err, rows) {
 					if (err) {
 						Exporter.error(err);
@@ -190,22 +207,19 @@ var logPrefix = '[nodebb-plugin-import-smallworld]';
 					//normalize here
 					var map = {};
 					rows.forEach(function(row) {
+						// some users don't have a small_world_id
+						if (!row._uid) {
+							row._uid = 'i' + row._id;
+						}
 						if (!row._email || !/\S+@\S+/.test(row._email)) {
 							row._email = 'INVALID_EMAIL+' + row._email + '@NODEBB.ORG';
 						}
 						if (row._groups) {
-							try {
-								row._groups = JSON.parse(row._groups);
-							} catch (e) {
-								delete row._groups;
-							}
+							row._groups = parseTillObject(row._groups);
 						}
 						if (row._followingUids) {
-							try {
-								row._followingUids = JSON.parse(row._followingUids);
-							} catch (e) {
-								delete row._followingUids;
-							}
+							row._followingUids = parseTillObject(row._followingUids);
+
 							if (row._followingUids) {
 								row._followingUids = row._followingUids
 									.map(function (id) {
@@ -217,11 +231,7 @@ var logPrefix = '[nodebb-plugin-import-smallworld]';
 							}
 						}
 						if (row._friendsUids) {
-							try {
-								row._friendsUids = JSON.parse(row._friendsUids);
-							} catch (e) {
-								delete row._friendsUids;
-							}
+							row._friendsUids = parseTillObject(row._friendsUids);
 							if (row._friendsUids) {
 								row._friendsUids = row._friendsUids
 									.map(function (id) {
@@ -273,7 +283,7 @@ var logPrefix = '[nodebb-plugin-import-smallworld]';
 			return callback(err);
 		}
 
-		Exporter.connection.query(query,
+		Exporter.query(query,
 			function(err, rows) {
 				if (err) {
 					Exporter.error(err);
@@ -327,7 +337,7 @@ var logPrefix = '[nodebb-plugin-import-smallworld]';
 			return callback(err);
 		}
 
-		Exporter.connection.query(query,
+		Exporter.query(query,
 			function(err, rows) {
 				var map = {};
 				if (err) {
@@ -375,7 +385,7 @@ var logPrefix = '[nodebb-plugin-import-smallworld]';
 			return callback(err);
 		}
 
-		Exporter.connection.query(query,
+		Exporter.query(query,
 			function(err, rows) {
 				var map = {};
 				if (err) {
