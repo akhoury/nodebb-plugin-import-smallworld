@@ -86,7 +86,7 @@ var parseTillObject = function (str) {
 			+ '\n' +  prefix + 'forum_categories.id as _cids, '
 			+ '\n' +  prefix + 'groups.owner_id as _ownerUid '
 			+ '\n' +  'FROM ' + prefix + 'groups '
-			+ '\n' + 'LEFT JOIN ' + prefix + 'forum_categories ON ' + prefix + 'forum_categories.group_id = ' + prefix + 'groups.id '
+			+ '\n' + 'LEFT JOIN ' + prefix + 'forum_categories ON ' + prefix + 'forum_categories.group_id = ' + prefix + 'groups.small_world_id '
 			+ '\n' + (start >= 0 && limit >= 0 ? ' LIMIT ' + start + ',' + limit : '');
 
 		if (!Exporter.connection) {
@@ -96,7 +96,7 @@ var parseTillObject = function (str) {
 		}
 
 		getUserIdsMap(function (err, idsMap) {
-			Exporter.connection.query(query,
+			Exporter.query(query,
 				function(err, rows) {
 					if (err) {
 						Exporter.error(err);
